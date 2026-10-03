@@ -79,7 +79,7 @@ Trước mỗi giao dịch nondet, test gọi `sim_install_mocks` để gắn mo
 
 ## Frontend
 
-App Vite nằm trong `frontend/`. Chain khóa `studionet`. Chưa có `VITE_CONTRACT_ADDRESS` thì trang vẫn mở, có banner, và không gửi giao dịch.
+App Vite nằm trong `frontend/`. Chain khóa `studionet`. `VITE_CONTRACT_ADDRESS` nằm trong `frontend/.env.production`. Nếu biến này trống, trang vẫn mở, có banner, và không gửi giao dịch.
 
 ```bash
 cd frontend
@@ -87,7 +87,7 @@ npm install
 npm run dev
 ```
 
-Vercel: đặt root directory là `frontend`, thêm `VITE_CONTRACT_ADDRESS`. Người giữ dự án tự deploy Vercel.
+Vercel: đặt root directory là `frontend`. Địa chỉ contract đã có trong `frontend/.env.production`. Người giữ dự án tự deploy Vercel.
 
 ## Deploy contract trên studionet
 
@@ -96,15 +96,13 @@ Việc deploy contract là tay, trên [studio.genlayer.com](https://studio.genla
 1. Mở Studio, chọn studionet.
 2. Dán `contracts/toolguard.py`. Constructor không nhận tham số.
 3. Deploy và đợi `Result: SUCCESS`.
-4. Gửi địa chỉ contract lại để ghi vào `frontend/.env`:
-
-```bash
-VITE_CONTRACT_ADDRESS=0x...
-```
+4. Địa chỉ đã deploy được ghi trong `frontend/.env.production`.
 
 ### Địa chỉ contract
 
-Chưa có. Điền sau khi deploy trả `Result: SUCCESS`.
+`0x3319aA4d131dbd2Dc649283644e4a22dC6c0A10d`
+
+[Explorer studionet](https://explorer-studio.genlayer.com/address/0x3319aA4d131dbd2Dc649283644e4a22dC6c0A10d)
 
 ## Known issue
 
