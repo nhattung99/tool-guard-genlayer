@@ -1,0 +1,23 @@
+---
+description: ToolGuard git remote and deploy workflow
+alwaysApply: true
+---
+
+# ToolGuard git and Vercel
+
+Standing instruction from the project owner. Follow it at the end of every coding task.
+
+## Git
+
+- Remote: `https://github.com/nhathung201/tool-guard-genlayer.git`
+- Owner: `nhathung201/tool-guard-genlayer`
+- Default branch: `main`
+- When a requested coding task is finished, commit the relevant changes and push to `origin`.
+- This standing request is the authorization to commit and push after coding work. Do not wait for a separate "commit" or "push" message.
+- Do not force-push. Do not skip hooks. Do not commit secrets (`.env`, credentials, keys).
+- If there is nothing to commit, do not create an empty commit.
+
+## Vercel
+
+- Do not deploy, link, or push this project to Vercel.
+- The owner deploys to Vercel themselves.
