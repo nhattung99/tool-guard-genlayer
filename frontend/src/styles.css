@@ -1,0 +1,150 @@
+:root {
+  color: #241c16;
+  background: #f3ecdf;
+  font-family: "Public Sans", sans-serif;
+  line-height: 1.45;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+}
+
+button, input, select {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  background: #9c3b1e;
+  color: #fffaf3;
+  border-radius: 999px;
+  padding: 0.65rem 1rem;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.ghost, .chip {
+  background: transparent;
+  color: #241c16;
+  border: 1px solid #c8b8a2;
+}
+
+.chip.on, .ghost:hover, .chip:hover {
+  background: #241c16;
+  color: #fffaf3;
+}
+
+.page {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 0 1rem 3rem;
+}
+
+.banner {
+  margin: 0 -1rem 0.6rem;
+  padding: 0.7rem 1rem;
+  background: #1f6b4a;
+  color: #f4fff8;
+  text-align: center;
+}
+
+.banner.warn {
+  background: #8a4b12;
+}
+
+.top, .row, .wallet, .url-row, .chips {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.top {
+  justify-content: space-between;
+  padding: 1.2rem 0;
+}
+
+.wallet {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.wallet small {
+  word-break: break-all;
+  color: #5e5146;
+}
+
+h1, h2 {
+  font-family: "Newsreader", serif;
+  font-weight: 650;
+  margin: 0;
+}
+
+h1 { font-size: 3rem; line-height: 0.95; }
+
+.eyebrow {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  margin-bottom: 0.3rem;
+}
+
+.lede { max-width: 38rem; }
+
+.panel, .card, .crash {
+  background: #fffaf3;
+  border: 1px solid #e4d5c3;
+  border-radius: 18px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+form, .card {
+  display: grid;
+  gap: 0.8rem;
+}
+
+label { display: grid; gap: 0.35rem; }
+
+input, select {
+  width: 100%;
+  border: 1px solid #d9c8b4;
+  background: #fff;
+  border-radius: 12px;
+  padding: 0.7rem 0.8rem;
+}
+
+.url-row input { flex: 1; }
+
+.preview, .hint, .meta {
+  color: #5e5146;
+  margin: 0;
+}
+
+.verdict {
+  margin: 0;
+  padding: 0.7rem;
+  background: #f6efe4;
+  border-radius: 12px;
+}
+
+.flags { margin: 0; }
+
+.flash {
+  padding: 0.7rem 0.9rem;
+  border-radius: 12px;
+}
+
+.flash.bad { background: #f8d7cc; }
+.flash.ok { background: #d9f0e3; }
+
+@media (max-width: 700px) {
+  h1 { font-size: 2.3rem; }
+  .top { align-items: flex-start; }
+}
