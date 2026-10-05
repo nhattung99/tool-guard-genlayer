@@ -18,24 +18,24 @@ import {
   subtractWei,
 } from "./money";
 
-const CATEGORIES = ["Dụng cụ cầm tay", "Thiết bị điện tử", "Xe đạp-xe máy", "Đồ cắm trại", "Khác"];
+const CATEGORIES = ["Hand tools", "Electronics", "Bikes and motorbikes", "Camping gear", "Other"];
 const DEPOSIT_CHIPS = ["1", "5", "10", "20", "50"];
 const PAYOUT_PERCENTS = [10, 25, 50, 75];
 const DEADLINES = [
-  { days: 1, label: "1 ngày" },
-  { days: 3, label: "3 ngày" },
-  { days: 7, label: "7 ngày" },
-  { days: 14, label: "14 ngày" },
+  { days: 1, label: "1 day" },
+  { days: 3, label: "3 days" },
+  { days: 7, label: "7 days" },
+  { days: 14, label: "14 days" },
 ];
 
 const STATUS_LABEL = {
-  AWAITING_HANDOVER: "Chờ owner nộp ảnh trước khi giao",
-  RENTED: "Đang thuê",
-  RETURN_REPORTED: "Đã báo trả, chờ AI phân xử",
-  RESOLVED: "Đã phân xử",
-  DISPUTED: "Chưa đủ chắc, cần bằng chứng rõ hơn",
-  PAYOUT_FAILED: "Trả tiền bị lỗi một phần",
-  EXPIRED_FORFEITED: "Quá hạn, cọc bị tịch thu",
+  AWAITING_HANDOVER: "Waiting for the owner to submit pre-handover photos",
+  RENTED: "Rented",
+  RETURN_REPORTED: "Return reported, waiting for the AI",
+  RESOLVED: "Resolved",
+  DISPUTED: "Not confident enough — clearer evidence needed",
+  PAYOUT_FAILED: "Payout failed in part",
+  EXPIRED_FORFEITED: "Overdue, deposit forfeited",
 };
 
 function sameAddress(left, right) {
@@ -70,17 +70,17 @@ function UrlEditor({ label, urls, onChange }) {
               update(index, text.trim());
             }}
           >
-            Dán
+            Paste
           </button>
           {urls.length > 1 ? (
             <button type="button" onClick={() => onChange(urls.filter((_, i) => i !== index))}>
-              Xóa
+              Remove
             </button>
           ) : null}
         </div>
       ))}
       <button type="button" className="ghost" onClick={() => onChange(urls.concat(""))}>
-        Thêm link
+        Add link
       </button>
     </div>
   );
@@ -91,15 +91,15 @@ function settlementText(rental) {
   const payout = BigInt(String(rental.damaged_payout_to_owner || "0"));
   const refund = subtractWei(deposit, payout);
   if (rental.status === "EXPIRED_FORFEITED" || (rental.status === "PAYOUT_FAILED" && !rental.verdict)) {
-    return `Owner nhận toàn bộ cọc ${formatWeiToGen(deposit)} GEN nếu lần chuyển thành công.`;
+    return `The owner receives the full deposit of ${formatWeiToGen(deposit)} GEN if the transfer succeeds.`;
   }
   if (rental.verdict === "DAMAGED") {
-    return `Owner nhận ${formatWeiToGen(payout)} GEN. Renter nhận lại ${formatWeiToGen(refund)} GEN.`;
+    return `The owner receives ${formatWeiToGen(payout)} GEN. The renter receives ${formatWeiToGen(refund)} GEN back.`;
   }
   if (rental.verdict === "NO_DAMAGE") {
-    return `Renter nhận lại đủ cọc ${formatWeiToGen(deposit)} GEN.`;
+    return `The renter receives the full deposit of ${formatWeiToGen(deposit)} GEN back.`;
   }
-  return `Nếu không hỏng, renter nhận ${formatWeiToGen(deposit)} GEN. Nếu hỏng, owner nhận ${formatWeiToGen(payout)} GEN và renter nhận ${formatWeiToGen(refund)} GEN.`;
+  return `If there is no damage, the renter receives ${formatWeiToGen(deposit)} GEN. If there is damage, the owner receives ${formatWeiToGen(payout)} GEN and the renter receives ${formatWeiToGen(refund)} GEN.`;
 }
 
 export default function App() {
@@ -148,7 +148,7 @@ export default function App() {
       }
       setRentals(next.reverse());
     } catch (err) {
-      setError(err?.message || "Không đọc được contract.");
+      setError(err?.message || "Could not read the contract.");
     } finally {
       setLoadingList(false);
     }
@@ -172,20 +172,20 @@ export default function App() {
       const session = await connectStudionet();
       setAccount(session.address);
       setWriteClient(session);
-      setNotice(`Đã nối ví trên ${CHAIN.name || "studionet"}.`);
+      setNotice(`Wallet connected on ${CHAIN.name || "studionet"}.`);
       await refresh(session.readClient);
     } catch (err) {
-      setError(err?.message || "Không nối được ví.");
+      setError(err?.message || "Could not connect the wallet.");
     }
   }
 
   async function runTx(key, fn) {
     if (!contractReady) {
-      setError("Chưa có địa chỉ contract. App chỉ xem trước giao diện.");
+      setError("No contract address yet. This page is a preview only.");
       return;
     }
     if (!writeClient) {
-      setError("Hãy nối MetaMask trên studionet trước.");
+      setError("Connect MetaMask on studionet first.");
       return;
     }
     setBusy(key);
@@ -193,10 +193,10 @@ export default function App() {
     setNotice("");
     try {
       await fn();
-      setNotice("Giao dịch đã được chấp nhận. Đang đọc lại trạng thái.");
+      setNotice("Transaction accepted. Refreshing the rental.");
       await refresh(writeClient.readClient);
     } catch (err) {
-      setError(err?.message || "Giao dịch thất bại.");
+      setError(err?.message || "Transaction failed.");
     } finally {
       setBusy("");
     }
@@ -205,20 +205,20 @@ export default function App() {
   async function createRental(event) {
     event.preventDefault();
     if (!payoutOk) {
-      setError("Mức bồi thường phải lớn hơn 0 và nhỏ hơn tiền cọc.");
+      setError("The damage payout must be greater than 0 and less than the deposit.");
       return;
     }
     if (!/^0x[a-fA-F0-9]{40}$/.test(owner.trim())) {
-      setError("Địa chỉ owner không hợp lệ.");
+      setError("The owner address is invalid.");
       return;
     }
     if (sameAddress(owner, account)) {
-      setError("Renter và owner phải là hai ví khác nhau.");
+      setError("The renter and the owner must be two different wallets.");
       return;
     }
     const text = description.trim();
     if (!text) {
-      setError("Hãy mô tả ngắn thiết bị.");
+      setError("Add a short description of the equipment.");
       return;
     }
     await runTx("create", async () => {
@@ -230,7 +230,7 @@ export default function App() {
         [owner.trim(), `${category}: ${text}`, payoutWei, deadlineUnix(days)],
         depositWei
       );
-      setNotice(`Đã tạo đơn #${count.toString()}.`);
+      setNotice(`Created rental #${count.toString()}.`);
       setDescription("");
     });
   }
@@ -242,11 +242,11 @@ export default function App() {
   return (
     <div className="page">
       <div className="banner">
-        Miễn phí sử dụng — chỉ tốn phí gas mạng GenLayer khi ký giao dịch. Không có phí nền tảng nào khác.
+        Free to use — you only pay GenLayer network gas when you sign a transaction. There is no other platform fee.
       </div>
       {!contractReady ? (
         <div className="banner warn">
-          Chưa có địa chỉ contract. Đặt VITE_CONTRACT_ADDRESS sau khi deploy studionet thành công. Trang này vẫn mở được, các nút gửi giao dịch đang tắt.
+          No contract address yet. Set VITE_CONTRACT_ADDRESS after a successful studionet deploy. This page still opens, and the transaction buttons stay off.
         </div>
       ) : null}
 
@@ -255,15 +255,15 @@ export default function App() {
           <p className="eyebrow">Sharing economy · studionet</p>
           <h1>ToolGuard</h1>
           <p className="lede">
-            Cọc thuê thiết bị giữa cá nhân. Owner chụp tình trạng trước khi giao, renter chụp lúc trả. AI đối chiếu và chỉ chọn không hỏng hoặc có hỏng.
+            Peer-to-peer equipment rental escrow. The owner photographs the condition before handover, and the renter photographs it at return. The AI compares the two and chooses only no damage or damaged.
           </p>
         </div>
         <div className="wallet">
           <button type="button" onClick={connect}>
-            {account ? "Đổi ví" : "Nối MetaMask"}
+            {account ? "Switch wallet" : "Connect MetaMask"}
           </button>
-          <small>{account || "Chưa nối ví"}</small>
-          <small>{contractReady ? CONTRACT_ADDRESS : "Chưa gắn contract"}</small>
+          <small>{account || "Wallet not connected"}</small>
+          <small>{contractReady ? CONTRACT_ADDRESS : "Contract not set"}</small>
         </div>
       </header>
 
@@ -271,10 +271,10 @@ export default function App() {
       {notice ? <p className="flash ok">{notice}</p> : null}
 
       <section className="panel">
-        <h2>Tạo đơn thuê</h2>
+        <h2>Create a rental</h2>
         <form onSubmit={createRental}>
           <label>
-            Loại thiết bị
+            Equipment type
             <div className="chips">
               {CATEGORIES.map((item) => (
                 <button
@@ -289,28 +289,28 @@ export default function App() {
             </div>
           </label>
           <label>
-            Mô tả ngắn
+            Short description
             <input
               value={description}
               maxLength={180}
-              placeholder="Máy khoan pin, thân xám, đầu mũi 10mm"
+              placeholder="Cordless drill, grey body, 10mm bit"
               onChange={(event) => setDescription(event.target.value)}
             />
           </label>
           <label>
-            Địa chỉ owner
+            Owner address
             <div className="url-row">
               <input value={owner} placeholder="0x..." onChange={(event) => setOwner(event.target.value)} />
               <button
                 type="button"
                 onClick={async () => setOwner((await navigator.clipboard.readText()).trim())}
               >
-                Dán
+                Paste
               </button>
             </div>
           </label>
           <label>
-            Tiền cọc (GEN)
+            Deposit (GEN)
             <div className="chips">
               {DEPOSIT_CHIPS.map((item) => (
                 <button
@@ -326,7 +326,7 @@ export default function App() {
             <input value={depositText} inputMode="decimal" onChange={(event) => setDepositText(event.target.value)} />
           </label>
           <label>
-            Bồi thường nếu hỏng
+            Damage payout
             <div className="chips">
               {PAYOUT_PERCENTS.map((item) => (
                 <button
@@ -338,7 +338,7 @@ export default function App() {
                     setPayoutPercent(item);
                   }}
                 >
-                  {item}% cọc
+                  {item}% of deposit
                 </button>
               ))}
               <button
@@ -346,7 +346,7 @@ export default function App() {
                 className={useCustomPayout ? "chip on" : "chip"}
                 onClick={() => setUseCustomPayout(true)}
               >
-                Tự nhập
+                Custom amount
               </button>
             </div>
             {useCustomPayout ? (
@@ -359,7 +359,7 @@ export default function App() {
             ) : null}
           </label>
           <label>
-            Hạn trả đồ
+            Return deadline
             <select value={days} onChange={(event) => setDays(Number(event.target.value))}>
               {DEADLINES.map((item) => (
                 <option key={item.days} value={item.days}>
@@ -369,24 +369,24 @@ export default function App() {
             </select>
           </label>
           <p className="preview">
-            Cọc {formatWeiToGen(depositWei)} GEN. Nếu hỏng, owner nhận {formatWeiToGen(payoutWei)} GEN, renter nhận lại{" "}
-            {formatWeiToGen(subtractWei(depositWei, payoutWei))} GEN. Nếu không hỏng, renter nhận lại đủ cọc.
+            Deposit {formatWeiToGen(depositWei)} GEN. If damaged, the owner receives {formatWeiToGen(payoutWei)} GEN and the renter receives{" "}
+            {formatWeiToGen(subtractWei(depositWei, payoutWei))} GEN back. If undamaged, the renter receives the full deposit back.
           </p>
           <button type="submit" disabled={!contractReady || !payoutOk || busy === "create"}>
-            {busy === "create" ? "Đang gửi cọc..." : "Gửi cọc và tạo đơn"}
+            {busy === "create" ? "Sending deposit..." : "Send deposit and create rental"}
           </button>
         </form>
       </section>
 
       <section className="panel">
         <div className="row">
-          <h2>Đơn thuê</h2>
+          <h2>Rentals</h2>
           <button type="button" className="ghost" onClick={() => refresh(writeClient?.readClient)} disabled={!contractReady || loadingList}>
-            {loadingList ? "Đang đọc..." : "Tải lại"}
+            {loadingList ? "Loading..." : "Refresh"}
           </button>
         </div>
-        {!contractReady ? <p>Danh sách sẽ hiện sau khi có địa chỉ contract.</p> : null}
-        {contractReady && rentals.length === 0 && !loadingList ? <p>Chưa có đơn nào trên contract này.</p> : null}
+        {!contractReady ? <p>The list appears after a contract address is set.</p> : null}
+        {contractReady && rentals.length === 0 && !loadingList ? <p>No rentals on this contract yet.</p> : null}
         {rentals.map((rental) => {
           const id = String(rental.id);
           const mineOwner = sameAddress(account, rental.owner);
@@ -397,7 +397,7 @@ export default function App() {
           return (
             <article className="card" key={id}>
               <header>
-                <strong>Đơn #{id}</strong>
+                <strong>Rental #{id}</strong>
                 <span>{STATUS_LABEL[rental.status] || rental.status}</span>
               </header>
               <p>{rental.equipment_description}</p>
@@ -409,25 +409,25 @@ export default function App() {
               <p>{settlementText(rental)}</p>
               {rental.verdict ? (
                 <p className="verdict">
-                  {rental.verdict} · độ chắc {rental.confidence}/100
+                  {rental.verdict} · confidence {rental.confidence}/100
                   <br />
                   {rental.verdict_reason}
                 </p>
               ) : null}
               {rental.status === "PAYOUT_FAILED" || rental.owner_paid || rental.renter_refunded ? (
                 <ul className="flags">
-                  <li>Owner đã nhận: {rental.owner_paid ? "rồi" : "chưa"}</li>
-                  <li>Renter đã được hoàn: {rental.renter_refunded ? "rồi" : "chưa"}</li>
+                  <li>Owner paid: {rental.owner_paid ? "yes" : "no"}</li>
+                  <li>Renter refunded: {rental.renter_refunded ? "yes" : "no"}</li>
                 </ul>
               ) : null}
               <p className="hint">
-                Owner nên chụp ảnh TRƯỚC khi giao, renter nên chụp ảnh NGAY LÚC trả — càng rõ góc độ, càng dễ AI đối chiếu.
+                The owner should photograph BEFORE handover, and the renter should photograph AT THE MOMENT of return. Clearer angles make the AI comparison easier.
               </p>
 
               {rental.status === "AWAITING_HANDOVER" && mineOwner ? (
                 <div>
                   <UrlEditor
-                    label="Ảnh / link tình trạng trước khi giao"
+                    label="Photos or links of the condition before handover"
                     urls={urlsFor(preUrls, id)}
                     onChange={(next) => setPreUrls({ ...preUrls, [id]: next })}
                   />
@@ -443,7 +443,7 @@ export default function App() {
                       )
                     }
                   >
-                    {busy === `hand-${id}` ? "Đang gửi..." : "Xác nhận đã giao"}
+                    {busy === `hand-${id}` ? "Sending..." : "Confirm handover"}
                   </button>
                 </div>
               ) : null}
@@ -451,12 +451,12 @@ export default function App() {
               {(rental.status === "RENTED" || rental.status === "DISPUTED") && mineRenter ? (
                 <div>
                   <UrlEditor
-                    label="Ảnh / link tình trạng lúc trả"
+                    label="Photos or links of the condition at return"
                     urls={urlsFor(postUrls, id)}
                     onChange={(next) => setPostUrls({ ...postUrls, [id]: next })}
                   />
                   <UrlEditor
-                    label="Nguồn bổ sung, có thể bỏ trống"
+                    label="Extra sources, optional"
                     urls={urlsFor(refUrls, id)}
                     onChange={(next) => setRefUrls({ ...refUrls, [id]: next })}
                   />
@@ -473,7 +473,7 @@ export default function App() {
                       )
                     }
                   >
-                    {busy === `ret-${id}` ? "Đang gửi..." : rental.status === "DISPUTED" ? "Nộp lại bằng chứng" : "Báo đã trả đồ"}
+                    {busy === `ret-${id}` ? "Sending..." : rental.status === "DISPUTED" ? "Resubmit evidence" : "Report return"}
                   </button>
                 </div>
               ) : null}
@@ -488,7 +488,7 @@ export default function App() {
                     )
                   }
                 >
-                  {busy === `ai-${id}` ? "AI đang đối chiếu ảnh trước và sau..." : "Yêu cầu AI phân xử"}
+                  {busy === `ai-${id}` ? "The AI is comparing the before and after photos..." : "Ask the AI to decide"}
                 </button>
               ) : null}
 
@@ -502,7 +502,7 @@ export default function App() {
                     )
                   }
                 >
-                  {busy === `forfeit-${id}` ? "Đang tịch thu..." : "Quá hạn, nhận toàn bộ cọc"}
+                  {busy === `forfeit-${id}` ? "Claiming deposit..." : "Overdue — claim the full deposit"}
                 </button>
               ) : null}
 
@@ -516,7 +516,7 @@ export default function App() {
                     )
                   }
                 >
-                  {busy === `retry-${id}` ? "Đang thử lại..." : "Thử lại phần chưa trả"}
+                  {busy === `retry-${id}` ? "Retrying..." : "Retry the unpaid side"}
                 </button>
               ) : null}
             </article>

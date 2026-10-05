@@ -18,12 +18,12 @@ export function createReadClient() {
 export async function connectStudionet() {
   const provider = window.ethereum;
   if (!provider) {
-    throw new Error("Không thấy ví trình duyệt. Hãy cài MetaMask rồi thử lại.");
+    throw new Error("No browser wallet found. Install MetaMask and try again.");
   }
   const accounts = await provider.request({ method: "eth_requestAccounts" });
   const address = accounts?.[0];
   if (!address) {
-    throw new Error("Ví không trả về địa chỉ.");
+    throw new Error("The wallet did not return an address.");
   }
   const writeClient = createClient({
     chain: studionet,
@@ -63,7 +63,7 @@ export async function writeAndWait(writeClient, readClient, functionName, args, 
     status: TransactionStatus.ACCEPTED,
   });
   if (receipt?.txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
-    throw new Error("Contract từ chối giao dịch. Kiểm tra vai trò, trạng thái đơn và số GEN.");
+    throw new Error("The contract rejected the transaction. Check your role, the rental status, and the GEN amount.");
   }
   return receipt;
 }

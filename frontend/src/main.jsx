@@ -17,7 +17,7 @@ class Boundary extends React.Component {
     if (this.state.error) {
       return (
         <main className="crash">
-          <h1>ToolGuard gặp lỗi khi vẽ trang</h1>
+          <h1>ToolGuard failed while rendering this page</h1>
           <p>{this.state.error.message}</p>
         </main>
       );
