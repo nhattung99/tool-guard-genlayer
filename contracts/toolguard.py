@@ -168,7 +168,7 @@ class ToolGuard(gl.Contract):
             raise UserError("Rental does not exist")
         return self._rental_view(rental_id, self.rentals[rental_id])
 
-    @gl.public.write
+    @gl.public.write.payable
     def create_rental(
         self,
         owner: Address,
@@ -176,7 +176,7 @@ class ToolGuard(gl.Contract):
         damaged_payout_to_owner: bigint,
         rental_end_deadline: u256,
     ) -> str:
-        deposit = bigint(gl.message.value)
+        deposit = bigint(int(gl.message.value))
         if deposit <= bigint(0):
             raise UserError("Must send GEN as deposit (amount must be > 0)")
         if not equipment_description or len(equipment_description.strip()) == 0:

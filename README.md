@@ -40,10 +40,10 @@ Một contract `contracts/toolguard.py`, class `ToolGuard`, giữ GEN trực ti�
 API đã khóa theo Studio hiện hành:
 
 - Người gọi: `gl.message.sender_address`
-- GEN gửi kèm: `gl.message.value` trên `@gl.public.write`
+- GEN gửi kèm: `gl.message.value` trên `@gl.public.write.payable`. Studio từ chối value khác 0 nếu method chỉ là `@gl.public.write`.
 - Trả GEN: `gl.get_contract_at(address).emit_transfer(value=u256(amount))`
 - Thời gian: `gl.message.datetime` đổi sang Unix giây bằng `datetime`
-- Không dùng `gl.transfer`, `gl.message.sender`, `gl.block.timestamp`, hay `@gl.public.write.payable`
+- Không dùng `gl.transfer`, `gl.message.sender`, hay `gl.block.timestamp`
 
 `retry_resolution` chỉ chuyển phía còn `owner_paid == False` hoặc `renter_refunded == False`. Cờ đã True không bị xóa và không bị chuyển lại.
 
@@ -53,7 +53,7 @@ Mọi số tiền là số nguyên wei. 1 GEN = 10^18 wei. Không có `float` tr
 
 | Chỗ | Input | Phép tính | Output |
 | --- | --- | --- | --- |
-| `create_rental` | `gl.message.value` | `bigint(value)`, chặn `<= 0` | `deposit_amount` |
+| `create_rental` | `gl.message.value` trên method payable | `bigint(int(value))`, chặn `<= 0` | `deposit_amount` |
 | `create_rental` | `damaged_payout_to_owner` | chặn `<= 0` hoặc `>= deposit` | lưu nguyên số đã thỏa thuận |
 | `NO_DAMAGE` | `deposit_amount` | một lần `emit_transfer` cho renter | renter nhận đủ cọc, `renter_refunded` |
 | `DAMAGED` owner | `damaged_payout_to_owner` | một lần `emit_transfer` nếu `owner_paid` còn false | owner nhận đúng mức cố định |
