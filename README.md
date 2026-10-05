@@ -66,7 +66,7 @@ Mọi số tiền là số nguyên wei. 1 GEN = 10^18 wei. Không có `float` tr
 | `subtractWei` | hai wei | trừ `BigInt` | preview phần hoàn |
 | `deadlineUnix` | số ngày | giây Unix, không phải tiền | `rental_end_deadline` |
 
-`scripts/check-no-float-money.js` quét `frontend/src/**/*.{js,jsx}` và fail nếu `parseFloat`, `Math.round`, `Math.floor` hoặc `Math.ceil` đứng gần biến tiền. Script gắn vào `prebuild`.
+`frontend/scripts/check-no-float-money.cjs` quét `frontend/src/**/*.{js,jsx}` và fail nếu `parseFloat`, `Math.round`, `Math.floor` hoặc `Math.ceil` đứng gần biến tiền. Script gắn vào `prebuild` để Vercel chạy được khi root là `frontend`. `scripts/check-no-float-money.js` ở gốc repo gọi lại cùng file đó.
 
 ## Test
 
