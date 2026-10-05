@@ -1,5 +1,5 @@
 ---
-description: ToolGuard git remote and deploy workflow
+description: ToolGuard git remote and Vercel deploy workflow
 alwaysApply: true
 ---
 
@@ -9,9 +9,11 @@ Standing instruction from the project owner. Follow it at the end of every codin
 
 ## Git
 
-- Remote: `https://github.com/nhathung201/tool-guard-genlayer.git`
-- Owner: `nhathung201/tool-guard-genlayer`
+- Remote: `https://github.com/nhattung99/tool-guard-genlayer.git`
+- Owner: `nhattung99/tool-guard-genlayer`
+- Account: `nhattung99`
 - Default branch: `main`
+- Do not use `https://github.com/nhathung201/tool-guard-genlayer.git`.
 - When a requested coding task is finished, commit the relevant changes and push to `origin`.
 - This standing request is the authorization to commit and push after coding work. Do not wait for a separate "commit" or "push" message.
 - Do not force-push. Do not skip hooks. Do not commit secrets (`.env`, credentials, keys).
@@ -19,5 +21,7 @@ Standing instruction from the project owner. Follow it at the end of every codin
 
 ## Vercel
 
-- Do not deploy, link, or push this project to Vercel.
-- The owner deploys to Vercel themselves.
+- Deploy production on the existing Vercel account `tungcdnvn-5854` (team Nguyen Nhat Tung's projects).
+- Project name: `tool-guard-genlayer`
+- App root: `frontend`
+- Chain stays `studionet`. Contract address lives in `frontend/.env.production`.

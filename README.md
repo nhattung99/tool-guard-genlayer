@@ -87,7 +87,7 @@ npm install
 npm run dev
 ```
 
-Vercel: đặt root directory là `frontend`. Địa chỉ contract đã có trong `frontend/.env.production`. Người giữ dự án tự deploy Vercel.
+GitHub: `https://github.com/nhattung99/tool-guard-genlayer.git`. Vercel project `tool-guard-genlayer` trên tài khoản cũ, root directory là `frontend`. Địa chỉ contract nằm trong `frontend/.env.production`.
 
 ## Deploy contract trên studionet
 
@@ -100,9 +100,9 @@ Việc deploy contract là tay, trên [studio.genlayer.com](https://studio.genla
 
 ### Địa chỉ contract
 
-`0x3319aA4d131dbd2Dc649283644e4a22dC6c0A10d`
+`0x3dAe2a3da91FFE3b7fb17D48DB51C02c68Da38bC`
 
-[Explorer studionet](https://explorer-studio.genlayer.com/address/0x3319aA4d131dbd2Dc649283644e4a22dC6c0A10d)
+[Explorer studionet](https://explorer-studio.genlayer.com/address/0x3dAe2a3da91FFE3b7fb17D48DB51C02c68Da38bC)
 
 ## Known issue
 
