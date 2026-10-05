@@ -15,23 +15,79 @@ export function createReadClient() {
   return createClient({ chain: studionet });
 }
 
+function injectedProvider() {
+  const ethereum = window.ethereum;
+  if (!ethereum) return null;
+  const list = Array.isArray(ethereum.providers) ? ethereum.providers : [];
+  return list.find((item) => item?.isMetaMask) || ethereum;
+}
+
+function studioChainId() {
+  return `0x${Number(CHAIN.id).toString(16)}`;
+}
+
+function readableWalletError(err) {
+  const message = String(err?.message || err || "");
+  if (/wallet_getSnaps|wallet_requestSnaps|corresponding handler/i.test(message)) {
+    return new Error("This wallet cannot switch to GenLayer. Install MetaMask and connect again.");
+  }
+  if (err?.code === 4001) {
+    return new Error("The wallet request was rejected.");
+  }
+  return err instanceof Error ? err : new Error(message || "Could not connect the wallet.");
+}
+
+async function ensureStudionet(provider) {
+  const chainId = studioChainId();
+  const current = await provider.request({ method: "eth_chainId" });
+  if (String(current).toLowerCase() === chainId) return;
+
+  const network = {
+    chainId,
+    chainName: CHAIN.name || "Genlayer Studio Network",
+    rpcUrls: [...(CHAIN.rpcUrls?.default?.http || ["https://studio.genlayer.com/api"])],
+    nativeCurrency: CHAIN.nativeCurrency || { name: "GEN Token", symbol: "GEN", decimals: 18 },
+    blockExplorerUrls: CHAIN.blockExplorers?.default?.url ? [CHAIN.blockExplorers.default.url] : [],
+  };
+
+  try {
+    await provider.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId }],
+    });
+  } catch (err) {
+    const code = err?.code ?? err?.data?.originalError?.code;
+    const message = String(err?.message || "");
+    const missingChain = code === 4902 || /unrecognized chain|not been added|unknown chain/i.test(message);
+    if (!missingChain) throw readableWalletError(err);
+    await provider.request({
+      method: "wallet_addEthereumChain",
+      params: [network],
+    });
+  }
+}
+
 export async function connectStudionet() {
-  const provider = window.ethereum;
+  const provider = injectedProvider();
   if (!provider) {
     throw new Error("No browser wallet found. Install MetaMask and try again.");
   }
-  const accounts = await provider.request({ method: "eth_requestAccounts" });
-  const address = accounts?.[0];
-  if (!address) {
-    throw new Error("The wallet did not return an address.");
+  try {
+    const accounts = await provider.request({ method: "eth_requestAccounts" });
+    const address = accounts?.[0];
+    if (!address) {
+      throw new Error("The wallet did not return an address.");
+    }
+    await ensureStudionet(provider);
+    const writeClient = createClient({
+      chain: studionet,
+      account: address,
+      provider,
+    });
+    return { address, writeClient, readClient: createReadClient() };
+  } catch (err) {
+    throw readableWalletError(err);
   }
-  const writeClient = createClient({
-    chain: studionet,
-    account: address,
-    provider,
-  });
-  await writeClient.connect("studionet");
-  return { address, writeClient, readClient: createReadClient() };
 }
 
 export async function readRentalCount(readClient) {
