@@ -12,6 +12,12 @@ if "bigint" not in globals():
     bigint = int
 
 
+def _as_address(value):
+    if isinstance(value, Address):
+        return value
+    return Address(value)
+
+
 def _current_unix_timestamp() -> int:
     """Unix seconds from the transaction clock exposed as gl.message.datetime."""
     raw_dt = getattr(gl.message, "datetime", None)
@@ -177,11 +183,13 @@ class ToolGuard(gl.Contract):
         rental_end_deadline: u256,
     ) -> str:
         deposit = bigint(int(gl.message.value))
+        owner = _as_address(owner)
+        renter = _as_address(gl.message.sender_address)
         if deposit <= bigint(0):
             raise UserError("Must send GEN as deposit (amount must be > 0)")
         if not equipment_description or len(equipment_description.strip()) == 0:
             raise UserError("Equipment description cannot be empty")
-        if owner == gl.message.sender_address:
+        if owner == renter:
             raise UserError("Renter and owner cannot be the same address")
         if damaged_payout_to_owner <= bigint(0) or damaged_payout_to_owner >= deposit:
             raise UserError(
@@ -192,7 +200,7 @@ class ToolGuard(gl.Contract):
         self.rental_counter = self.rental_counter + bigint(1)
         self.rentals[rental_id] = Rental(
             owner=owner,
-            renter=gl.message.sender_address,
+            renter=renter,
             equipment_description=equipment_description,
             deposit_amount=deposit,
             damaged_payout_to_owner=damaged_payout_to_owner,

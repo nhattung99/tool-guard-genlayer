@@ -7,6 +7,7 @@ import {
   hasContract,
   readRental,
   readRentalCount,
+  asCalldataAddress,
   writeAndWait,
 } from "./genlayer";
 import {
@@ -208,8 +209,11 @@ export default function App() {
       setError("The damage payout must be greater than 0 and less than the deposit.");
       return;
     }
-    if (!/^0x[a-fA-F0-9]{40}$/.test(owner.trim())) {
-      setError("The owner address is invalid.");
+    let ownerAddress;
+    try {
+      ownerAddress = asCalldataAddress(owner.trim());
+    } catch (err) {
+      setError(err?.message || "The owner address is invalid.");
       return;
     }
     if (sameAddress(owner, account)) {
@@ -222,15 +226,19 @@ export default function App() {
       return;
     }
     await runTx("create", async () => {
-      const count = await readRentalCount(writeClient.readClient);
+      const before = await readRentalCount(writeClient.readClient);
       await writeAndWait(
         writeClient.writeClient,
         writeClient.readClient,
         "create_rental",
-        [owner.trim(), `${category}: ${text}`, payoutWei, deadlineUnix(days)],
+        [ownerAddress, `${category}: ${text}`, payoutWei, deadlineUnix(days)],
         depositWei
       );
-      setNotice(`Created rental #${count.toString()}.`);
+      const after = await readRentalCount(writeClient.readClient);
+      if (after <= before) {
+        throw new Error("The wallet accepted the transaction, but the contract did not save the rental.");
+      }
+      setNotice(`Created rental #${before.toString()}.`);
       setDescription("");
     });
   }

@@ -1,6 +1,7 @@
 import { createClient } from "genlayer-js";
 import { studionet } from "genlayer-js/chains";
 import { ExecutionResult, TransactionStatus } from "genlayer-js/types";
+import { CalldataAddress } from "../node_modules/genlayer-js/dist/chunk-EY35NPSE.js";
 
 const rawAddress = String(import.meta.env.VITE_CONTRACT_ADDRESS || "").trim();
 
@@ -9,6 +10,33 @@ export const CHAIN = studionet;
 
 export function hasContract() {
   return CONTRACT_ADDRESS.length > 0;
+}
+
+const HEX = "0123456789abcdef";
+
+export function asCalldataAddress(value) {
+  const hex = String(value || "").trim().toLowerCase();
+  if (!hex.startsWith("0x") || hex.length !== 42) {
+    throw new Error("The owner address is invalid.");
+  }
+  const body = hex.slice(2);
+  const bytes = new Uint8Array(20);
+  for (let index = 0; index < 20; index += 1) {
+    const high = HEX.indexOf(body[index * 2]);
+    const low = HEX.indexOf(body[index * 2 + 1]);
+    if (high < 0 || low < 0) {
+      throw new Error("The owner address is invalid.");
+    }
+    bytes[index] = high * 16 + low;
+  }
+  return new CalldataAddress(bytes);
+}
+
+function executionFailed(receipt) {
+  if (receipt?.txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) return true;
+  const leader = receipt?.consensus_data?.leader_receipt;
+  const receipts = Array.isArray(leader) ? leader : [];
+  return receipts.some((item) => String(item?.execution_result || "").toUpperCase() === "ERROR");
 }
 
 export function createReadClient() {
@@ -118,8 +146,8 @@ export async function writeAndWait(writeClient, readClient, functionName, args, 
     hash: txHash,
     status: TransactionStatus.ACCEPTED,
   });
-  if (receipt?.txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) {
-    throw new Error("The contract rejected the transaction. Check your role, the rental status, and the GEN amount.");
+  if (executionFailed(receipt)) {
+    throw new Error("The contract rejected the transaction. The rental was not saved.");
   }
   return receipt;
 }
