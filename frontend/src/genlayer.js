@@ -32,11 +32,20 @@ export function asCalldataAddress(value) {
   return new CalldataAddress(bytes);
 }
 
+function quorumCancel(item) {
+  const detail = JSON.stringify(item?.genvm_result || "");
+  return detail.includes("VALIDATOR_QUORUM_REACHED") || detail.includes("cancelled after quorum");
+}
+
 function executionFailed(receipt) {
   if (receipt?.txExecutionResultName === ExecutionResult.FINISHED_WITH_ERROR) return true;
   const leader = receipt?.consensus_data?.leader_receipt;
-  const receipts = Array.isArray(leader) ? leader : [];
-  return receipts.some((item) => String(item?.execution_result || "").toUpperCase() === "ERROR");
+  const receipts = Array.isArray(leader) ? leader : leader ? [leader] : [];
+  return receipts.some((item) => {
+    if (item?.mode && item.mode !== "leader") return false;
+    if (quorumCancel(item)) return false;
+    return String(item?.execution_result || "").toUpperCase() === "ERROR";
+  });
 }
 
 export function createReadClient() {
@@ -147,7 +156,7 @@ export async function writeAndWait(writeClient, readClient, functionName, args, 
     status: TransactionStatus.ACCEPTED,
   });
   if (executionFailed(receipt)) {
-    throw new Error("The contract rejected the transaction. The rental was not saved.");
+    throw new Error("The contract rejected the transaction.");
   }
   return receipt;
 }

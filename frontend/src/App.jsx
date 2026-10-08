@@ -430,6 +430,15 @@ export default function App() {
               ) : null}
               <p className="hint">
                 The owner should photograph BEFORE handover, and the renter should photograph AT THE MOMENT of return. Clearer angles make the AI comparison easier.
+                Example pages the network can open:{" "}
+                <a href="https://raw.githubusercontent.com/nhattung99/tool-guard-genlayer/main/evidence/before.txt" target="_blank" rel="noreferrer">
+                  before
+                </a>
+                {" and "}
+                <a href="https://raw.githubusercontent.com/nhattung99/tool-guard-genlayer/main/evidence/after.txt" target="_blank" rel="noreferrer">
+                  after
+                </a>
+                .
               </p>
 
               {rental.status === "AWAITING_HANDOVER" && mineOwner ? (
