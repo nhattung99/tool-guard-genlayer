@@ -55,6 +55,9 @@ def _page_text(res) -> str:
     return str(res)
 
 
+PAYOUT_CONFIDENCE_MINIMUM = 60
+
+
 def _as_confidence(raw) -> int:
     if isinstance(raw, bool) or isinstance(raw, float):
         raise UserError("confidence must be an integer from 0 to 100")
@@ -65,6 +68,39 @@ def _as_confidence(raw) -> int:
     if value > 100:
         raise UserError("confidence must be an integer from 0 to 100")
     return value
+
+
+def _below_payout_confidence(confidence: int) -> bool:
+    return confidence < PAYOUT_CONFIDENCE_MINIMUM
+
+
+def _leader_payload(leader_res):
+    payload = getattr(leader_res, "value", None)
+    if not isinstance(payload, dict):
+        payload = getattr(leader_res, "calldata", None)
+    if isinstance(payload, dict):
+        return payload
+    return None
+
+
+def _same_settlement_decision(mine: dict, leader_res) -> bool:
+    """Agree on the verdict and on which side of the payout threshold confidence falls.
+
+    The numeric confidence can differ. The branch that reopens a dispute or pays
+    out cannot, because that branch is what moves the deposit.
+    """
+    leader = _leader_payload(leader_res)
+    if leader is None:
+        return False
+    if mine["verdict"] != str(leader.get("verdict", "")).strip():
+        return False
+    try:
+        leader_confidence = _as_confidence(leader.get("confidence"))
+    except Exception:
+        return False
+    return _below_payout_confidence(mine["confidence"]) == _below_payout_confidence(
+        leader_confidence
+    )
 
 
 def _parse_verdict(raw) -> dict:
@@ -92,15 +128,6 @@ def _parse_verdict(raw) -> dict:
         "confidence": _as_confidence(data.get("confidence", 0)),
         "reason": reason,
     }
-
-
-def _leader_verdict(leader_res) -> str:
-    payload = getattr(leader_res, "value", None)
-    if not isinstance(payload, dict):
-        payload = getattr(leader_res, "calldata", None)
-    if not isinstance(payload, dict):
-        return ""
-    return str(payload.get("verdict", ""))
 
 
 def _nonempty_urls(urls, label: str) -> None:
@@ -195,6 +222,8 @@ class ToolGuard(gl.Contract):
             raise UserError(
                 "damaged_payout_to_owner must be > 0 and strictly less than deposit_amount"
             )
+        if int(rental_end_deadline) <= _current_unix_timestamp():
+            raise UserError("Rental deadline must be in the future")
 
         rental_id = str(self.rental_counter)
         self.rental_counter = self.rental_counter + bigint(1)
@@ -313,13 +342,13 @@ Return ONLY raw JSON, no markdown:
                 my_res = leader_fn()
             except Exception:
                 return False
-            return my_res["verdict"] == _leader_verdict(leader_res)
+            return _same_settlement_decision(my_res, leader_res)
 
         result = gl.vm.run_nondet(leader_fn, validator_fn)
         rental.verdict = result["verdict"]
         rental.confidence = u256(result["confidence"])
         rental.verdict_reason = result["reason"]
-        if result["confidence"] < 60:
+        if _below_payout_confidence(result["confidence"]):
             rental.status = "DISPUTED"
             self.rentals[rental_id] = rental
             return
@@ -333,7 +362,7 @@ Return ONLY raw JSON, no markdown:
         any_failure = False
         forfeit = rental.verdict == ""
 
-        if rental.verdict == "NO_DAMAGE":
+        if rental.verdict == "NO_DAMAGE" or rental.verdict == "NO_HANDOVER":
             if not rental.renter_refunded:
                 try:
                     gl.get_contract_at(rental.renter).emit_transfer(
@@ -378,6 +407,8 @@ Return ONLY raw JSON, no markdown:
             rental.status = "PAYOUT_FAILED"
         elif forfeit:
             rental.status = "EXPIRED_FORFEITED"
+        elif rental.verdict == "NO_HANDOVER":
+            rental.status = "REFUNDED_NO_HANDOVER"
         else:
             rental.status = "RESOLVED"
         self.rentals[rental_id] = rental
@@ -405,4 +436,22 @@ Return ONLY raw JSON, no markdown:
             raise UserError("Can only claim if renter never reported return")
         if _current_unix_timestamp() <= int(rental.rental_end_deadline):
             raise UserError("Rental deadline has not passed yet")
+        self._execute_settlement(rental_id)
+
+    @gl.public.write
+    def claim_missed_handover_refund(self, rental_id: str) -> None:
+        """Renter recovers the full deposit if the owner never completed handover."""
+        if rental_id not in self.rentals:
+            raise UserError("Rental does not exist")
+        rental = self.rentals[rental_id]
+        if gl.message.sender_address != rental.renter:
+            raise UserError("Only renter can recover an unfinished handover")
+        if rental.status != "AWAITING_HANDOVER":
+            raise UserError("Can only recover if the owner never completed handover")
+        if _current_unix_timestamp() <= int(rental.rental_end_deadline):
+            raise UserError("Rental deadline has not passed yet")
+        rental.verdict = "NO_HANDOVER"
+        rental.verdict_reason = "Owner did not complete handover before the deadline"
+        rental.confidence = u256(0)
+        self.rentals[rental_id] = rental
         self._execute_settlement(rental_id)

@@ -1,5 +1,6 @@
 import json
 import re
+from datetime import datetime, timezone
 
 import gltest.direct.loader as loader
 
@@ -8,6 +9,7 @@ PAYOUT = 4 * 10**18
 REFUND = DEPOSIT - PAYOUT
 FUTURE = 4_102_444_800
 PAST = 1
+AFTER_FUTURE = "2100-01-02T00:00:00Z"
 PRE = "https://evidence.example/before"
 POST = "https://evidence.example/after"
 REF = "https://evidence.example/listing"
@@ -59,6 +61,21 @@ def _fail(address) -> None:
 
 def _clear_failures() -> None:
     _fail_recipients.clear()
+
+
+def _warp(vm, iso: str) -> None:
+    """Move the transaction clock.
+
+    Direct gltest refreshes gl.message without copying vm.warp() into
+    message_raw["datetime"], which is the clock the contract reads.
+    """
+    import sys
+
+    vm.warp(iso)
+    gl_module = sys.modules.get("genlayer.gl")
+    message_raw = getattr(gl_module, "message_raw", None) if gl_module is not None else None
+    if isinstance(message_raw, dict):
+        message_raw["datetime"] = iso
 
 
 def sim_install_mocks(vm, verdict: str, confidence: int, *, reference: bool = False, skip_pre: bool = False, skip_post: bool = False, raw_llm: str | None = None) -> None:
@@ -156,7 +173,8 @@ def test_damaged_splits_fixed_amounts(direct_vm, direct_deploy, direct_alice, di
 
 def test_forfeit_pays_owner_full_deposit(direct_vm, direct_deploy, direct_alice, direct_bob):
     contract = _deploy(direct_deploy)
-    rental_id = _handover(direct_vm, contract, direct_alice, direct_bob, PAST)
+    rental_id = _handover(direct_vm, contract, direct_alice, direct_bob)
+    _warp(direct_vm, AFTER_FUTURE)
     direct_vm.sender = _as_address(direct_bob)
     contract.claim_no_return_forfeit(rental_id)
     rental = contract.get_rental(rental_id)
@@ -354,7 +372,8 @@ def test_damaged_partial_failures_retry_only_missing_side(direct_vm, direct_depl
 
 def test_forfeit_transfer_fail_then_retry_once(direct_vm, direct_deploy, direct_alice, direct_bob):
     contract = _deploy(direct_deploy)
-    rental_id = _handover(direct_vm, contract, direct_alice, direct_bob, PAST)
+    rental_id = _handover(direct_vm, contract, direct_alice, direct_bob)
+    _warp(direct_vm, AFTER_FUTURE)
     _fail(direct_bob)
     direct_vm.sender = _as_address(direct_bob)
     contract.claim_no_return_forfeit(rental_id)
@@ -390,4 +409,132 @@ def test_validator_rejects_a_different_binary_verdict(direct_vm, direct_deploy, 
     sim_install_mocks(direct_vm, "NO_DAMAGE", 90)
     contract.resolve_rental(rental_id)
     sim_install_mocks(direct_vm, "DAMAGED", 90)
+    assert direct_vm.run_validator() is False
+
+
+def test_past_and_present_deadlines_are_rejected(direct_vm, direct_deploy, direct_alice, direct_bob):
+    contract = _deploy(direct_deploy)
+    _warp(direct_vm, "2026-06-01T00:00:00Z")
+    now = int(datetime(2026, 6, 1, tzinfo=timezone.utc).timestamp())
+    direct_vm.sender = _as_address(direct_alice)
+    direct_vm.value = DEPOSIT
+    with direct_vm.expect_revert("must be in the future"):
+        contract.create_rental(_as_address(direct_bob), "May khoan", PAYOUT, PAST)
+    with direct_vm.expect_revert("must be in the future"):
+        contract.create_rental(_as_address(direct_bob), "May khoan", PAYOUT, now)
+    with direct_vm.expect_revert("must be in the future"):
+        contract.create_rental(_as_address(direct_bob), "May khoan", PAYOUT, now - 1)
+    assert contract.get_rental_count() == "0"
+    direct_vm.value = DEPOSIT
+    rental_id = contract.create_rental(_as_address(direct_bob), "May khoan", PAYOUT, now + 1)
+    direct_vm.value = 0
+    assert rental_id == "0"
+    assert contract.get_rental(rental_id)["rental_end_deadline"] == str(now + 1)
+
+
+def test_renter_recovers_full_deposit_if_handover_never_happens(direct_vm, direct_deploy, direct_alice, direct_bob):
+    contract = _deploy(direct_deploy)
+    rental_id = _rent(direct_vm, contract, direct_alice, direct_bob)
+    _warp(direct_vm, AFTER_FUTURE)
+    direct_vm.sender = _as_address(direct_alice)
+    contract.claim_missed_handover_refund(rental_id)
+    rental = contract.get_rental(rental_id)
+    assert rental["status"] == "REFUNDED_NO_HANDOVER"
+    assert rental["verdict"] == "NO_HANDOVER"
+    assert rental["renter_refunded"] is True
+    assert rental["owner_paid"] is False
+    assert _balance(direct_vm, direct_alice) == DEPOSIT
+    assert _balance(direct_vm, direct_bob) == 0
+    with direct_vm.expect_revert("never completed handover"):
+        contract.claim_missed_handover_refund(rental_id)
+    assert _balance(direct_vm, direct_alice) == DEPOSIT
+
+
+def test_missed_handover_refund_is_rejected_for_early_owner_or_completed_handover(
+    direct_vm, direct_deploy, direct_alice, direct_bob
+):
+    contract = _deploy(direct_deploy)
+    waiting = _rent(direct_vm, contract, direct_alice, direct_bob, FUTURE)
+    direct_vm.sender = _as_address(direct_alice)
+    with direct_vm.expect_revert("deadline has not passed"):
+        contract.claim_missed_handover_refund(waiting)
+    direct_vm.sender = _as_address(direct_bob)
+    with direct_vm.expect_revert("Only renter"):
+        contract.claim_missed_handover_refund(waiting)
+    assert contract.get_rental(waiting)["status"] == "AWAITING_HANDOVER"
+    assert _balance(direct_vm, direct_alice) == 0
+
+    handed_over = _handover(direct_vm, contract, direct_alice, direct_bob)
+    direct_vm.sender = _as_address(direct_alice)
+    with direct_vm.expect_revert("never completed handover"):
+        contract.claim_missed_handover_refund(handed_over)
+    assert contract.get_rental(handed_over)["status"] == "RENTED"
+    assert _balance(direct_vm, direct_alice) == 0
+    assert _balance(direct_vm, direct_bob) == 0
+
+
+def test_missed_handover_payout_failure_retries_once(direct_vm, direct_deploy, direct_alice, direct_bob):
+    contract = _deploy(direct_deploy)
+    rental_id = _rent(direct_vm, contract, direct_alice, direct_bob)
+    _warp(direct_vm, AFTER_FUTURE)
+    _fail(direct_alice)
+    direct_vm.sender = _as_address(direct_alice)
+    contract.claim_missed_handover_refund(rental_id)
+    failed = contract.get_rental(rental_id)
+    assert failed["status"] == "PAYOUT_FAILED"
+    assert failed["verdict"] == "NO_HANDOVER"
+    assert failed["renter_refunded"] is False
+    assert _balance(direct_vm, direct_alice) == 0
+    _clear_failures()
+    contract.retry_resolution(rental_id)
+    restored = contract.get_rental(rental_id)
+    assert restored["status"] == "REFUNDED_NO_HANDOVER"
+    assert restored["renter_refunded"] is True
+    assert _balance(direct_vm, direct_alice) == DEPOSIT
+    assert _balance(direct_vm, direct_bob) == 0
+    with direct_vm.expect_revert("Can only retry PAYOUT_FAILED"):
+        contract.retry_resolution(rental_id)
+    assert _balance(direct_vm, direct_alice) == DEPOSIT
+
+
+def test_confidence_threshold_boundary_controls_payout(direct_vm, direct_deploy, direct_alice, direct_bob):
+    contract = _deploy(direct_deploy)
+    at_threshold = _ready(direct_vm, contract, direct_alice, direct_bob)
+    sim_install_mocks(direct_vm, "NO_DAMAGE", 60)
+    contract.resolve_rental(at_threshold)
+    paid = contract.get_rental(at_threshold)
+    assert paid["status"] == "RESOLVED"
+    assert paid["confidence"] == "60"
+    assert _balance(direct_vm, direct_alice) == DEPOSIT
+
+    below = _ready(direct_vm, contract, direct_alice, direct_bob)
+    sim_install_mocks(direct_vm, "DAMAGED", 59)
+    contract.resolve_rental(below)
+    disputed = contract.get_rental(below)
+    assert disputed["status"] == "DISPUTED"
+    assert disputed["confidence"] == "59"
+    assert disputed["owner_paid"] is False
+    assert disputed["renter_refunded"] is False
+    assert _balance(direct_vm, direct_alice) == DEPOSIT
+    assert _balance(direct_vm, direct_bob) == 0
+
+
+def test_validators_must_agree_on_confidence_threshold_side(direct_vm, direct_deploy, direct_alice, direct_bob):
+    payout = _deploy(direct_deploy)
+    rental_id = _ready(direct_vm, payout, direct_alice, direct_bob)
+    sim_install_mocks(direct_vm, "NO_DAMAGE", 90)
+    payout.resolve_rental(rental_id)
+    sim_install_mocks(direct_vm, "NO_DAMAGE", 60)
+    assert direct_vm.run_validator() is True
+    sim_install_mocks(direct_vm, "NO_DAMAGE", 59)
+    assert direct_vm.run_validator() is False
+
+    dispute = _deploy(direct_deploy)
+    rental_id = _ready(direct_vm, dispute, direct_alice, direct_bob)
+    sim_install_mocks(direct_vm, "DAMAGED", 59)
+    dispute.resolve_rental(rental_id)
+    assert dispute.get_rental(rental_id)["status"] == "DISPUTED"
+    sim_install_mocks(direct_vm, "DAMAGED", 0)
+    assert direct_vm.run_validator() is True
+    sim_install_mocks(direct_vm, "DAMAGED", 60)
     assert direct_vm.run_validator() is False

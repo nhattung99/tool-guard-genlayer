@@ -13,10 +13,12 @@ ToolGuard giữ tiền cọc trong một intelligent contract:
 1. Renter tạo đơn, gửi GEN làm cọc, ghi địa chỉ owner, mô tả thiết bị, mức bồi thường cố định nếu hỏng, và hạn trả.
 2. Owner nộp link bằng chứng trước khi giao. Trạng thái chuyển sang `RENTED`.
 3. Renter nộp link bằng chứng lúc trả.
-4. `resolve_rental` fetch hai bộ bằng chứng, hỏi AI, và validator chỉ chấp nhận khi cùng một verdict nhị phân.
+4. `resolve_rental` fetch hai bộ bằng chứng, hỏi AI, và validator chỉ chấp nhận khi cùng một verdict nhị phân và cùng một phía của ngưỡng confidence 60.
 5. `NO_DAMAGE`: renter nhận lại đủ cọc. `DAMAGED`: owner nhận đúng số đã thỏa thuận, renter nhận phần còn lại.
-6. Confidence dưới 60 thành `DISPUTED`. Renter được nộp bằng chứng khác rồi phân xử lại.
+6. Confidence dưới 60 thành `DISPUTED` chỉ khi validator cũng đặt confidence dưới 60. Renter được nộp bằng chứng khác rồi phân xử lại.
 7. Nếu quá hạn mà renter không báo trả, owner gọi `claim_no_return_forfeit` và nhận toàn bộ cọc. Nhánh này không gọi AI.
+8. Nếu quá hạn mà owner chưa nộp bằng chứng giao đồ, renter gọi `claim_missed_handover_refund` và nhận lại đủ cọc. Nhánh này không gọi AI.
+9. `create_rental` từ chối hạn trả nhỏ hơn hoặc bằng thời điểm giao dịch.
 
 ## Giới hạn trung thực
 
@@ -26,7 +28,7 @@ Cơ chế đối chiếu là hai bên nộp bằng chứng ở hai thời điể
 
 `reference_urls` chỉ là bằng chứng bổ sung, có thể bỏ trống. Lỗi khi tải các URL này được bỏ qua. URL tình trạng trước và sau bắt buộc phải tải được.
 
-Verdict chỉ có hai giá trị. Mức bồi thường khi `DAMAGED` là số cố định hai bên chọn lúc tạo đơn, không phải phần trăm do AI tính. Validator so đúng chuỗi verdict, không có dung sai.
+Verdict chỉ có hai giá trị khi AI phân xử. Mức bồi thường khi `DAMAGED` là số cố định hai bên chọn lúc tạo đơn, không phải phần trăm do AI tính. Validator so đúng chuỗi verdict và so phía của ngưỡng confidence 60. Hai confidence khác nhau vẫn được chấp nhận nếu cùng dưới 60 hoặc cùng từ 60 trở lên. Số confidence chính xác của leader không tự chọn được nhánh trả tiền hay mở lại tranh chấp.
 
 ## Kiến trúc
 
@@ -58,7 +60,9 @@ Mọi số tiền là số nguyên wei. 1 GEN = 10^18 wei. Không có `float` tr
 | `NO_DAMAGE` | `deposit_amount` | một lần `emit_transfer` cho renter | renter nhận đủ cọc, `renter_refunded` |
 | `DAMAGED` owner | `damaged_payout_to_owner` | một lần `emit_transfer` nếu `owner_paid` còn false | owner nhận đúng mức cố định |
 | `DAMAGED` renter | `deposit_amount - damaged_payout_to_owner` | trừ bigint, `emit_transfer` nếu `renter_refunded` còn false | renter nhận phần chênh |
-| Quá hạn | `deposit_amount` | `emit_transfer` toàn bộ cho owner, không gọi AI | `EXPIRED_FORFEITED`, `owner_paid` |
+| Quá hạn, chưa trả | `deposit_amount` | `emit_transfer` toàn bộ cho owner, không gọi AI | `EXPIRED_FORFEITED`, `owner_paid` |
+| Quá hạn, chưa giao | `deposit_amount` | `emit_transfer` toàn bộ cho renter, không gọi AI | `REFUNDED_NO_HANDOVER`, `renter_refunded` |
+| `create_rental` | `rental_end_deadline` | chặn `<=` thời điểm giao dịch | không lưu đơn |
 | `retry_resolution` | hai cờ bool | chỉ gọi transfer cho cờ còn false | không trả trùng |
 | `parseGenToWei` | chuỗi GEN | tách phần nguyên/thập phân, pad 18 chữ số, `BigInt` | wei |
 | `formatWeiToGen` | wei | chia và mod `10^18` bằng `BigInt` | chuỗi GEN |
@@ -75,7 +79,7 @@ pip install -r requirements.txt
 python -m pytest tests/test_toolguard.py -q
 ```
 
-Trước mỗi giao dịch nondet, test gọi `sim_install_mocks` để gắn mock web/LLM. Suite gồm happy path hai verdict, tịch thu quá hạn, chặn báo trả khi chưa giao, confidence thấp rồi nộp lại, web/JSON hỏng, reference URL lỗi vẫn resolve, payout cấu hình sai, double-resolve, và transfer fail từng nhánh (`NO_DAMAGE`, `DAMAGED` chỉ owner, chỉ renter, cả hai, forfeit) rồi retry không trả trùng.
+Trước mỗi giao dịch nondet, test gọi `sim_install_mocks` để gắn mock web/LLM. Suite gồm happy path hai verdict, tịch thu quá hạn, hoàn cọc khi owner không handover, chặn hạn trả ở hiện tại hoặc quá khứ, chặn báo trả khi chưa giao, confidence 59 mở lại và 60 trả tiền, validator cùng phía hoặc khác phía ngưỡng 60, web/JSON hỏng, reference URL lỗi vẫn resolve, payout cấu hình sai, double-resolve, và transfer fail từng nhánh (`NO_DAMAGE`, `DAMAGED` chỉ owner, chỉ renter, cả hai, forfeit, missed handover) rồi retry không trả trùng.
 
 ## Frontend
 
@@ -100,9 +104,9 @@ Việc deploy contract là tay, trên [studio.genlayer.com](https://studio.genla
 
 ### Địa chỉ contract
 
-`0x245e06222E1221977cc9E235E11ED98aF6D47855`
+`0xbD05dA265aDEF9245f49b3a9bF1718D5Ed545568`
 
-[Explorer studionet](https://explorer-studio.genlayer.com/address/0x245e06222E1221977cc9E235E11ED98aF6D47855)
+[Explorer studionet](https://explorer-studio.genlayer.com/address/0xbD05dA265aDEF9245f49b3a9bF1718D5Ed545568)
 
 ## Known issue
 

@@ -37,6 +37,7 @@ const STATUS_LABEL = {
   DISPUTED: "Not confident enough — clearer evidence needed",
   PAYOUT_FAILED: "Payout failed in part",
   EXPIRED_FORFEITED: "Overdue, deposit forfeited",
+  REFUNDED_NO_HANDOVER: "Deposit returned — owner never completed handover",
 };
 
 function sameAddress(left, right) {
@@ -91,6 +92,9 @@ function settlementText(rental) {
   const deposit = BigInt(String(rental.deposit_amount || "0"));
   const payout = BigInt(String(rental.damaged_payout_to_owner || "0"));
   const refund = subtractWei(deposit, payout);
+  if (rental.verdict === "NO_HANDOVER" || rental.status === "REFUNDED_NO_HANDOVER") {
+    return `The owner never completed handover. The renter receives the full deposit of ${formatWeiToGen(deposit)} GEN back.`;
+  }
   if (rental.status === "EXPIRED_FORFEITED" || (rental.status === "PAYOUT_FAILED" && !rental.verdict)) {
     return `The owner receives the full deposit of ${formatWeiToGen(deposit)} GEN if the transfer succeeds.`;
   }
@@ -378,7 +382,7 @@ export default function App() {
           </label>
           <p className="preview">
             Deposit {formatWeiToGen(depositWei)} GEN. If damaged, the owner receives {formatWeiToGen(payoutWei)} GEN and the renter receives{" "}
-            {formatWeiToGen(subtractWei(depositWei, payoutWei))} GEN back. If undamaged, the renter receives the full deposit back.
+            {formatWeiToGen(subtractWei(depositWei, payoutWei))} GEN back. If undamaged, the renter receives the full deposit back. The return deadline must be in the future. If the owner never confirms handover by then, the renter can recover the full deposit.
           </p>
           <button type="submit" disabled={!contractReady || !payoutOk || busy === "create"}>
             {busy === "create" ? "Sending deposit..." : "Send deposit and create rental"}
@@ -402,6 +406,7 @@ export default function App() {
           const deadline = BigInt(String(rental.rental_end_deadline || "0"));
           const now = BigInt(Date.now()) / 1000n;
           const overdue = now > deadline && rental.status === "RENTED";
+          const handoverExpired = now > deadline && rental.status === "AWAITING_HANDOVER";
           return (
             <article className="card" key={id}>
               <header>
@@ -417,7 +422,9 @@ export default function App() {
               <p>{settlementText(rental)}</p>
               {rental.verdict ? (
                 <p className="verdict">
-                  {rental.verdict} · confidence {rental.confidence}/100
+                  {rental.verdict === "NO_HANDOVER"
+                    ? "Owner never completed handover"
+                    : `${rental.verdict} · confidence ${rental.confidence}/100`}
                   <br />
                   {rental.verdict_reason}
                 </p>
@@ -440,6 +447,26 @@ export default function App() {
                 </a>
                 .
               </p>
+
+              {rental.status === "AWAITING_HANDOVER" && mineRenter && !handoverExpired ? (
+                <p className="hint">
+                  If the owner does not confirm handover before the return deadline, you can recover the full deposit.
+                </p>
+              ) : null}
+
+              {handoverExpired && mineRenter ? (
+                <button
+                  type="button"
+                  disabled={busy === `refund-${id}`}
+                  onClick={() =>
+                    runTx(`refund-${id}`, () =>
+                      writeAndWait(writeClient.writeClient, writeClient.readClient, "claim_missed_handover_refund", [id])
+                    )
+                  }
+                >
+                  {busy === `refund-${id}` ? "Recovering deposit..." : "Recover deposit — owner never handed over"}
+                </button>
+              ) : null}
 
               {rental.status === "AWAITING_HANDOVER" && mineOwner ? (
                 <div>
