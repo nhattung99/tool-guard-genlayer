@@ -1,89 +1,89 @@
 # ToolGuard
 
-Escrow cọc thuê thiết bị ngắn hạn trên GenLayer. Hai cá nhân tự thỏa thuận mức bồi thường cố định. Owner nộp bằng chứng tình trạng trước khi giao, renter nộp bằng chứng lúc trả. Contract giữ GEN và chỉ giải ngân sau phán quyết nhị phân `NO_DAMAGE` hoặc `DAMAGED`.
+ToolGuard escrows a GEN deposit for short-term equipment rental on GenLayer. The two people agree on a fixed damage payout up front. The owner submits condition evidence before handover, and the renter submits evidence at return. The contract holds the GEN and pays it out only after a binary `NO_DAMAGE` or `DAMAGED` verdict.
 
-> ToolGuard chết nếu không có GenLayer: không có smart contract EVM nào đọc hiểu được ảnh tình trạng thiết bị phi cấu trúc để đối chiếu trước/sau, và không có bên trung gian nào đủ rẻ để phân xử hàng loạt lượt thuê đồ nhỏ lẻ giữa cá nhân — chỉ có đồng thuận AI phi tập trung của GenLayer mới làm được với chi phí gần bằng 0.
+> ToolGuard needs GenLayer. An ordinary EVM contract cannot read unstructured condition photos and compare them, and a human arbitrator is too expensive for small peer-to-peer rentals. GenLayer's decentralized AI consensus can do that comparison at near-zero cost.
 
-## Bài toán
+## The problem
 
-Cho thuê máy khoan, xe đạp, máy ảnh, đồ cắm trại giữa cá nhân hay kẹt ở câu hỏi lúc trả đồ: hỏng từ trước hay hỏng trong lúc thuê. Một trọng tài người cho từng lượt thuê nhỏ là quá đắt.
+Lending a drill, a bike, a camera, or camping gear between two people gets stuck on one question at return: was the damage already there, or did it happen during the rental? A human referee for every small rental costs too much.
 
-ToolGuard giữ tiền cọc trong một intelligent contract:
+ToolGuard holds the deposit in one intelligent contract:
 
-1. Renter tạo đơn, gửi GEN làm cọc, ghi địa chỉ owner, mô tả thiết bị, mức bồi thường cố định nếu hỏng, và hạn trả.
-2. Owner nộp link bằng chứng trước khi giao. Trạng thái chuyển sang `RENTED`.
-3. Renter nộp link bằng chứng lúc trả.
-4. `resolve_rental` fetch hai bộ bằng chứng, hỏi AI, và validator chỉ chấp nhận khi cùng một verdict nhị phân và cùng một phía của ngưỡng confidence 60.
-5. `NO_DAMAGE`: renter nhận lại đủ cọc. `DAMAGED`: owner nhận đúng số đã thỏa thuận, renter nhận phần còn lại.
-6. Confidence dưới 60 thành `DISPUTED` chỉ khi validator cũng đặt confidence dưới 60. Renter được nộp bằng chứng khác rồi phân xử lại.
-7. Nếu quá hạn mà renter không báo trả, owner gọi `claim_no_return_forfeit` và nhận toàn bộ cọc. Nhánh này không gọi AI.
-8. Nếu quá hạn mà owner chưa nộp bằng chứng giao đồ, renter gọi `claim_missed_handover_refund` và nhận lại đủ cọc. Nhánh này không gọi AI.
-9. `create_rental` từ chối hạn trả nhỏ hơn hoặc bằng thời điểm giao dịch.
+1. The renter creates the rental, sends GEN as the deposit, names the owner, describes the item, sets the fixed damage payout, and sets a return deadline.
+2. The owner submits evidence links from before handover. The status becomes `RENTED`.
+3. The renter submits evidence links from the return.
+4. `resolve_rental` fetches both sets, asks the AI, and validators accept the result only when they share the same binary verdict and the same side of the confidence threshold of 60.
+5. `NO_DAMAGE` refunds the full deposit to the renter. `DAMAGED` pays the owner only the amount both sides fixed in advance, and the renter receives the remainder.
+6. Confidence below 60 becomes `DISPUTED` only when the validators are also below 60. The renter can submit clearer evidence and ask again.
+7. If the deadline passes and the renter never reports a return, the owner calls `claim_no_return_forfeit` and receives the full deposit. This path does not call the AI.
+8. If the deadline passes and the owner never submits handover evidence, the renter calls `claim_missed_handover_refund` and receives the full deposit. This path does not call the AI.
+9. `create_rental` rejects a deadline that is not strictly in the future.
 
-## Giới hạn trung thực
+## Honest limit
 
-Lĩnh vực thuê đồ cá nhân không có nguồn thứ ba công khai kiểu tracking, hãng bảo hiểm hay cơ quan quản lý. Contract không kiểm tra được một sổ cái độc lập của thiết bị.
+Personal equipment rental has no public registry, insurer, or regulator for the item. The contract cannot check an independent ledger of the equipment.
 
-Cơ chế đối chiếu là hai bên nộp bằng chứng ở hai thời điểm khác nhau: owner nộp trước khi giao, renter nộp sau khi trả. Không bên nào một mình kiểm soát cả hai bộ. Đó là một dạng độc lập thực tế, không phải nguồn thứ ba chính thống, và không phải chống gian lận tuyệt đối. Hai bên vẫn có thể cùng đưa ảnh không trung thực.
+The comparison comes from the two parties filing evidence at different times: the owner before handover, the renter at return. Neither side alone controls both records. That is a practical form of independence. It is not an official third-party source, and it is not absolute fraud protection. Both sides can still submit untrue photos.
 
-`reference_urls` chỉ là bằng chứng bổ sung, có thể bỏ trống. Lỗi khi tải các URL này được bỏ qua. URL tình trạng trước và sau bắt buộc phải tải được.
+`reference_urls` are optional extra evidence. Failures while fetching those URLs are ignored. The before and after URLs must load.
 
-Verdict chỉ có hai giá trị khi AI phân xử. Mức bồi thường khi `DAMAGED` là số cố định hai bên chọn lúc tạo đơn, không phải phần trăm do AI tính. Validator so đúng chuỗi verdict và so phía của ngưỡng confidence 60. Hai confidence khác nhau vẫn được chấp nhận nếu cùng dưới 60 hoặc cùng từ 60 trở lên. Số confidence chính xác của leader không tự chọn được nhánh trả tiền hay mở lại tranh chấp.
+The AI verdict has two values. The `DAMAGED` payout is the fixed amount both sides chose when the rental was created, not a percentage invented by the model. Validators compare the verdict string and which side of 60 the confidence falls on. Different confidence numbers are accepted when they stay on the same side. The leader's exact score cannot choose the payout by itself.
 
-## Kiến trúc
+## Architecture
 
-Một contract `contracts/toolguard.py`, class `ToolGuard`, giữ GEN trực tiếp. Header runner:
+One contract, `contracts/toolguard.py`, class `ToolGuard`, holds the GEN directly. Runner header:
 
 ```python
 # v0.2.16
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 ```
 
-API đã khóa theo Studio hiện hành:
+Studio APIs used here:
 
-- Người gọi: `gl.message.sender_address`
-- GEN gửi kèm: `gl.message.value` trên `@gl.public.write.payable`. Studio từ chối value khác 0 nếu method chỉ là `@gl.public.write`.
-- Trả GEN cho ví thường: interface EVM `_Wallet(address).emit_transfer(value=u256(amount))`. `gl.get_contract_at` chỉ dùng cho intelligent contract khác, và Studionet trả `Contract not found` nếu địa chỉ nhận là ví.
-- Thời gian: `gl.message.datetime` đổi sang Unix giây bằng `datetime`
-- Không dùng `gl.transfer`, `gl.message.sender`, hay `gl.block.timestamp`
+- Caller: `gl.message.sender_address`
+- Incoming GEN: `gl.message.value` on `@gl.public.write.payable`. Studio rejects a non-zero value on a method that is only `@gl.public.write`.
+- Outgoing GEN to a normal wallet: the EVM interface `_Wallet(address).emit_transfer(value=u256(amount))`. `gl.get_contract_at` is for another intelligent contract. Studionet returns `Contract not found` when the recipient is a wallet.
+- Time: `gl.message.datetime`, converted to Unix seconds with `datetime`
+- Not used: `gl.transfer`, `gl.message.sender`, or `gl.block.timestamp`
 
-`retry_resolution` chỉ chuyển phía còn `owner_paid == False` hoặc `renter_refunded == False`. Cờ đã True không bị xóa và không bị chuyển lại.
+`retry_resolution` transfers only a side whose `owner_paid` or `renter_refunded` flag is still false. A flag that is already true is never cleared and is never paid again.
 
-## Bảng xử lý tiền
+## Money
 
-Mọi số tiền là số nguyên wei. 1 GEN = 10^18 wei. Không có `float` trong contract và không có `parseFloat`, `Math.round`, `Math.floor`, `Math.ceil` cạnh biến tiền ở frontend.
+Every amount is an integer number of wei. 1 GEN = 10^18 wei. The contract does not use `float`. The frontend does not use `parseFloat`, `Math.round`, `Math.floor`, or `Math.ceil` next to money values.
 
-| Chỗ | Input | Phép tính | Output |
+| Place | Input | Calculation | Output |
 | --- | --- | --- | --- |
-| `create_rental` | `gl.message.value` trên method payable | `bigint(int(value))`, chặn `<= 0` | `deposit_amount` |
-| `create_rental` | `damaged_payout_to_owner` | chặn `<= 0` hoặc `>= deposit` | lưu nguyên số đã thỏa thuận |
-| `NO_DAMAGE` | `deposit_amount` | một lần `emit_transfer` cho renter | renter nhận đủ cọc, `renter_refunded` |
-| `DAMAGED` owner | `damaged_payout_to_owner` | một lần `emit_transfer` nếu `owner_paid` còn false | owner nhận đúng mức cố định |
-| `DAMAGED` renter | `deposit_amount - damaged_payout_to_owner` | trừ bigint, `emit_transfer` nếu `renter_refunded` còn false | renter nhận phần chênh |
-| Quá hạn, chưa trả | `deposit_amount` | `emit_transfer` toàn bộ cho owner, không gọi AI | `EXPIRED_FORFEITED`, `owner_paid` |
-| Quá hạn, chưa giao | `deposit_amount` | `emit_transfer` toàn bộ cho renter, không gọi AI | `REFUNDED_NO_HANDOVER`, `renter_refunded` |
-| `create_rental` | `rental_end_deadline` | chặn `<=` thời điểm giao dịch | không lưu đơn |
-| `retry_resolution` | hai cờ bool | chỉ gọi transfer cho cờ còn false | không trả trùng |
-| `parseGenToWei` | chuỗi GEN | tách phần nguyên/thập phân, pad 18 chữ số, `BigInt` | wei |
-| `formatWeiToGen` | wei | chia và mod `10^18` bằng `BigInt` | chuỗi GEN |
-| `payoutWeiFromPercent` | cọc wei và số nguyên 10/25/50/75 | `(deposit * percent) / 100n`, bỏ kết quả không thỏa `0 < x < deposit` | gợi ý mức bồi thường |
-| `subtractWei` | hai wei | trừ `BigInt` | preview phần hoàn |
-| `deadlineUnix` | số ngày | giây Unix, không phải tiền | `rental_end_deadline` |
+| `create_rental` | `gl.message.value` on the payable method | `bigint(int(value))`, reject `<= 0` | `deposit_amount` |
+| `create_rental` | `damaged_payout_to_owner` | reject `<= 0` or `>= deposit` | the agreed amount, stored as-is |
+| `NO_DAMAGE` | `deposit_amount` | one `emit_transfer` to the renter | full deposit back, `renter_refunded` |
+| `DAMAGED` owner | `damaged_payout_to_owner` | one `emit_transfer` while `owner_paid` is false | the fixed amount |
+| `DAMAGED` renter | `deposit_amount - damaged_payout_to_owner` | bigint subtraction, `emit_transfer` while `renter_refunded` is false | the remainder |
+| Deadline passed, no return | `deposit_amount` | full `emit_transfer` to the owner, no AI | `EXPIRED_FORFEITED`, `owner_paid` |
+| Deadline passed, no handover | `deposit_amount` | full `emit_transfer` to the renter, no AI | `REFUNDED_NO_HANDOVER`, `renter_refunded` |
+| `create_rental` | `rental_end_deadline` | reject `<=` the transaction time | the rental is not stored |
+| `retry_resolution` | the two bool flags | transfer only the side that is still false | no double pay |
+| `parseGenToWei` | a GEN string | split integer and fraction, pad to 18 digits, `BigInt` | wei |
+| `formatWeiToGen` | wei | divide and mod `10^18` with `BigInt` | a GEN string |
+| `payoutWeiFromPercent` | deposit wei and 10, 25, 50, or 75 | `(deposit * percent) / 100n`, drop a result that is not `0 < x < deposit` | a suggested payout |
+| `subtractWei` | two wei values | `BigInt` subtraction | the refund preview |
+| `deadlineUnix` | a number of days | Unix seconds, not money | `rental_end_deadline` |
 
-`frontend/scripts/check-no-float-money.cjs` quét `frontend/src/**/*.{js,jsx}` và fail nếu `parseFloat`, `Math.round`, `Math.floor` hoặc `Math.ceil` đứng gần biến tiền. Script gắn vào `prebuild` để Vercel chạy được khi root là `frontend`. `scripts/check-no-float-money.js` ở gốc repo gọi lại cùng file đó.
+`frontend/scripts/check-no-float-money.cjs` scans `frontend/src/**/*.{js,jsx}` and fails if `parseFloat`, `Math.round`, `Math.floor`, or `Math.ceil` sits near a money variable. It runs in `prebuild` so Vercel can execute it when the app root is `frontend`. `scripts/check-no-float-money.js` at the repo root calls that same file.
 
-## Test
+## Tests
 
 ```bash
 pip install -r requirements.txt
 python -m pytest tests/test_toolguard.py -q
 ```
 
-Trước mỗi giao dịch nondet, test gọi `sim_install_mocks` để gắn mock web/LLM. Suite gồm happy path hai verdict, tịch thu quá hạn, hoàn cọc khi owner không handover, chặn hạn trả ở hiện tại hoặc quá khứ, chặn báo trả khi chưa giao, confidence 59 mở lại và 60 trả tiền, validator cùng phía hoặc khác phía ngưỡng 60, web/JSON hỏng, reference URL lỗi vẫn resolve, payout cấu hình sai, double-resolve, và transfer fail từng nhánh (`NO_DAMAGE`, `DAMAGED` chỉ owner, chỉ renter, cả hai, forfeit, missed handover) rồi retry không trả trùng.
+Before each nondet transaction, the tests call `sim_install_mocks` for the web and LLM mocks. The suite covers both verdicts, an overdue forfeit, a refund when the owner never hands the item over, a deadline that is now or in the past, a return reported before handover, confidence 59 reopening the dispute and 60 paying out, validators on the same side and on opposite sides of 60, broken web or JSON, an optional reference URL that fails, an invalid payout, a second resolve, and a failed transfer on each branch (`NO_DAMAGE`, `DAMAGED` owner only, renter only, both, forfeit, and missed handover) followed by one retry that does not pay twice.
 
 ## Frontend
 
-App Vite nằm trong `frontend/`. Chain khóa `studionet`. `VITE_CONTRACT_ADDRESS` nằm trong `frontend/.env.production`. Nếu biến này trống, trang vẫn mở, có banner, và không gửi giao dịch.
+The Vite app lives in `frontend/`. The chain is `studionet`. `VITE_CONTRACT_ADDRESS` is set in `frontend/.env` and `frontend/.env.production`. If that variable is empty, the page still opens, shows a banner, and does not send a transaction.
 
 ```bash
 cd frontend
@@ -91,25 +91,23 @@ npm install
 npm run dev
 ```
 
-GitHub: `https://github.com/nhattung99/tool-guard-genlayer.git`. Vercel project `tool-guard-genlayer` trên tài khoản cũ, root directory là `frontend`. Địa chỉ contract nằm trong `frontend/.env.production`.
+GitHub: `https://github.com/nhattung99/tool-guard-genlayer.git`. The Vercel project is `tool-guard-genlayer`, and the root directory is `frontend`.
 
-## Deploy contract trên studionet
+## Deployed Contract
 
-Việc deploy contract là tay, trên [studio.genlayer.com](https://studio.genlayer.com), mạng studionet. Không đổi sang testnet.
+`0x8159d1C50E7538E50f16c1E797C81d48131b5D43`
 
-1. Mở Studio, chọn studionet.
-2. Dán `contracts/toolguard.py`. Constructor không nhận tham số.
-3. Deploy và đợi `Result: SUCCESS`.
-4. Địa chỉ đã deploy được ghi trong `frontend/.env.production`.
+https://genlayer-explorer.vercel.app/address/0x8159d1C50E7538E50f16c1E797C81d48131b5D43
 
-### Địa chỉ contract
+Deploy on [studio.genlayer.com](https://studio.genlayer.com), network studionet. Do not switch the app to testnet.
 
-`0xBC3FA13b57ca1CaaA843688dD8fce6f53250dEC7`
-
-[Explorer studionet](https://explorer-studio.genlayer.com/address/0xBC3FA13b57ca1CaaA843688dD8fce6f53250dEC7)
+1. Open Studio and select studionet.
+2. Paste `contracts/toolguard.py`. The constructor takes no arguments.
+3. Deploy and wait for `Result: SUCCESS`.
+4. Write the deployed address into `frontend/.env` as `VITE_CONTRACT_ADDRESS`.
 
 ## Known issue
 
-Chuyển GEN cho ví đi qua một message ngoài. Lỗi ngay lúc gọi (value bằng 0, số dư không đủ, lời gọi bị từ chối) vào `PAYOUT_FAILED`, và `retry_resolution` chỉ trả phía còn thiếu.
+Paying a wallet sends an external message. An immediate failure, such as a zero value, an insufficient balance, or a rejected call, sets `PAYOUT_FAILED`. `retry_resolution` pays only the side that is still unpaid.
 
-Nếu message con fail sau khi transaction cha đã được chấp nhận, cờ đã nhận có thể là True trong khi ví đích chưa thấy tiền. Retry không đụng phía đã đánh dấu thành công, nên không trả trùng, nhưng cũng không tự biết message con fail muộn.
+If a child message fails after the parent transaction has already been accepted, a flag can be true while the destination wallet has not received the funds. A retry does not touch a side already marked paid, so it does not pay twice, and it also cannot see a child that failed later.
