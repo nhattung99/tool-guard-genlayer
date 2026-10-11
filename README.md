@@ -43,7 +43,7 @@ API đã khóa theo Studio hiện hành:
 
 - Người gọi: `gl.message.sender_address`
 - GEN gửi kèm: `gl.message.value` trên `@gl.public.write.payable`. Studio từ chối value khác 0 nếu method chỉ là `@gl.public.write`.
-- Trả GEN: `gl.get_contract_at(address).emit_transfer(value=u256(amount))`
+- Trả GEN cho ví thường: interface EVM `_Wallet(address).emit_transfer(value=u256(amount))`. `gl.get_contract_at` chỉ dùng cho intelligent contract khác, và Studionet trả `Contract not found` nếu địa chỉ nhận là ví.
 - Thời gian: `gl.message.datetime` đổi sang Unix giây bằng `datetime`
 - Không dùng `gl.transfer`, `gl.message.sender`, hay `gl.block.timestamp`
 
@@ -104,12 +104,12 @@ Việc deploy contract là tay, trên [studio.genlayer.com](https://studio.genla
 
 ### Địa chỉ contract
 
-`0xbD05dA265aDEF9245f49b3a9bF1718D5Ed545568`
+`0x439702C4727d55272E21514e5df000472851D709`
 
-[Explorer studionet](https://explorer-studio.genlayer.com/address/0xbD05dA265aDEF9245f49b3a9bF1718D5Ed545568)
+[Explorer studionet](https://explorer-studio.genlayer.com/address/0x439702C4727d55272E21514e5df000472851D709)
 
 ## Known issue
 
-`emit_transfer` xếp một message và có thể ném lỗi ngay (value bằng 0, số dư không đủ, lời gọi bị từ chối). Những lỗi đó vào `PAYOUT_FAILED` và `retry_resolution` chỉ trả phía còn thiếu.
+Chuyển GEN cho ví đi qua một message ngoài. Lỗi ngay lúc gọi (value bằng 0, số dư không đủ, lời gọi bị từ chối) vào `PAYOUT_FAILED`, và `retry_resolution` chỉ trả phía còn thiếu.
 
-Nếu message con fail sau khi transaction cha đã được chấp nhận, cờ đã nhận có thể là True trong khi ví đích chưa thấy tiền. Đó là cách message của GenLayer hoạt động. Retry không đụng phía đã đánh dấu thành công, nên không trả trùng, nhưng cũng không tự biết message con fail muộn.
+Nếu message con fail sau khi transaction cha đã được chấp nhận, cờ đã nhận có thể là True trong khi ví đích chưa thấy tiền. Retry không đụng phía đã đánh dấu thành công, nên không trả trùng, nhưng cũng không tự biết message con fail muộn.

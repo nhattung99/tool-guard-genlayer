@@ -130,6 +130,20 @@ def _parse_verdict(raw) -> dict:
     }
 
 
+@gl.evm.contract_interface
+class _Wallet:
+    class View:
+        pass
+
+    class Write:
+        pass
+
+
+def _pay(recipient, amount) -> None:
+    """Pay a normal wallet. get_contract_at looks for an intelligent contract and fails for an EOA."""
+    _Wallet(_as_address(recipient)).emit_transfer(value=u256(int(amount)))
+
+
 def _nonempty_urls(urls, label: str) -> None:
     if len(urls) < 1:
         raise UserError(f"At least 1 {label} required")
@@ -365,9 +379,7 @@ Return ONLY raw JSON, no markdown:
         if rental.verdict == "NO_DAMAGE" or rental.verdict == "NO_HANDOVER":
             if not rental.renter_refunded:
                 try:
-                    gl.get_contract_at(rental.renter).emit_transfer(
-                        value=u256(rental.deposit_amount)
-                    )
+                    _pay(rental.renter, rental.deposit_amount)
                     rental.renter_refunded = True
                 except Exception as exc:
                     any_failure = True
@@ -376,16 +388,14 @@ Return ONLY raw JSON, no markdown:
             refund_to_renter = rental.deposit_amount - rental.damaged_payout_to_owner
             if not rental.owner_paid:
                 try:
-                    gl.get_contract_at(rental.owner).emit_transfer(
-                        value=u256(rental.damaged_payout_to_owner)
-                    )
+                    _pay(rental.owner, rental.damaged_payout_to_owner)
                     rental.owner_paid = True
                 except Exception as exc:
                     any_failure = True
                     rental.verdict_reason += f" (Owner partial payout failed: {str(exc)})"
             if not rental.renter_refunded:
                 try:
-                    gl.get_contract_at(rental.renter).emit_transfer(value=u256(refund_to_renter))
+                    _pay(rental.renter, refund_to_renter)
                     rental.renter_refunded = True
                 except Exception as exc:
                     any_failure = True
@@ -393,9 +403,7 @@ Return ONLY raw JSON, no markdown:
         elif forfeit:
             if not rental.owner_paid:
                 try:
-                    gl.get_contract_at(rental.owner).emit_transfer(
-                        value=u256(rental.deposit_amount)
-                    )
+                    _pay(rental.owner, rental.deposit_amount)
                     rental.owner_paid = True
                 except Exception as exc:
                     any_failure = True

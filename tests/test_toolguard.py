@@ -2,6 +2,7 @@ import json
 import re
 from datetime import datetime, timezone
 
+import pytest
 import gltest.direct.loader as loader
 
 DEPOSIT = 10 * 10**18
@@ -41,6 +42,34 @@ def _emit_transfer(self, value=None, **kwargs):
 
 
 loader._EOAProxy.emit_transfer = _emit_transfer
+
+
+def _eth_send_hook(vm, request):
+    if not isinstance(request, dict) or "EthSend" not in request:
+        return None
+    payload = request["EthSend"]
+    amount = int(payload.get("value") or 0)
+    if amount <= 0:
+        raise ValueError("value must be greater than 0 for emit_transfer")
+    recipient = payload.get("address")
+    key = loader._normalize_addr(recipient)
+    if key in _fail_recipients:
+        raise RuntimeError(f"transfer rejected for {key}")
+    sender = getattr(vm, "_contract_address", None)
+    if sender is not None:
+        sender_bytes = vm._to_bytes(sender)
+        balance = vm._balances.get(sender_bytes, 0)
+        if balance < amount:
+            raise RuntimeError("insufficient contract balance")
+        vm._balances[sender_bytes] = balance - amount
+    recipient_bytes = vm._to_bytes(recipient)
+    vm._balances[recipient_bytes] = vm._balances.get(recipient_bytes, 0) + amount
+    return {"ok": None}
+
+
+@pytest.fixture(autouse=True)
+def _route_wallet_transfers(direct_vm):
+    direct_vm._gl_call_hook = _eth_send_hook
 
 
 def _as_address(raw):
