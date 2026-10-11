@@ -104,9 +104,9 @@ Việc deploy contract là tay, trên [studio.genlayer.com](https://studio.genla
 
 ### Địa chỉ contract
 
-`0x439702C4727d55272E21514e5df000472851D709`
+`0xBC3FA13b57ca1CaaA843688dD8fce6f53250dEC7`
 
-[Explorer studionet](https://explorer-studio.genlayer.com/address/0x439702C4727d55272E21514e5df000472851D709)
+[Explorer studionet](https://explorer-studio.genlayer.com/address/0xBC3FA13b57ca1CaaA843688dD8fce6f53250dEC7)
 
 ## Known issue
 
