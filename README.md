@@ -93,6 +93,10 @@ npm run dev
 
 GitHub: `https://github.com/nhattung99/tool-guard-genlayer.git`. The Vercel project is `tool-guard-genlayer`, and the root directory is `frontend`.
 
+## Live App
+
+https://tool-guard-genlayer.vercel.app
+
 ## Deployed Contract
 
 `0x8159d1C50E7538E50f16c1E797C81d48131b5D43`
